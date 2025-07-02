@@ -72,9 +72,50 @@ with app.app_context():
         print("Movie already exists in the DB.")
 
 
+class AddMovieForm(FlaskForm):
+    title = StringField("Movie Title")
+    submit = SubmitField("Add Movie")
+
+class RateMovieForm(FlaskForm):
+    rating = StringField("Your Rating Out of 10 e.g. 7.5")
+    review = StringField("Your Review")
+    submit = SubmitField("Done")
+
 @app.route('/')
 def main():
     result = db.session.execute(db.select(Movie))
     all_movies = result.scalars().all()
     return render_template('index.html', movies=all_movies)
 
+@app.route('/add', methods=['GET', 'POST'])
+def add_movie():
+    form = AddMovieForm()
+    if form.validate_on_submit():
+        movie_title = form.title.data
+        #Need to make an API call to fetch movie details
+    return render_template('add.html', form=form)
+
+
+@app.route('edit/<int:movie_id>', methods=['GET', 'POST'])
+def edit_movie(movie_id):
+    form = RateMovieForm()
+    movie = db.get_or_404(Movie, movie_id)
+
+    if request.method=='POST':
+        movie.rating = request.form.get('rating')
+        movie.review = request.form.get('review')
+        db.session.commit()
+        return redirect(url_for('home'))
+
+    return render_template('edit.html', form=form, movie=movie)
+
+@app.route('/delete/<int:movie_id>')
+def delete(movie_id):
+    movie = db.get_or_404(Movie, movie_id)
+    db.session.delete(movie)
+    db.session.commit()
+    return redirect(url_for('home'))
+
+
+if __name__=='__main__':
+    app.run(debug=True)
