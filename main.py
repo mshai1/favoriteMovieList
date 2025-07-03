@@ -7,6 +7,7 @@ from flask_wtf import FlaskForm
 from wtforms import StringField, SubmitField
 from wtforms.validators import DataRequired
 import requests
+import os
 
 '''
 Install the required packages first:
@@ -20,6 +21,17 @@ pip3 install -r requirements.txt
 
 This will install the packages from requirements.txt for this project
 '''
+
+TMDB_API_KEY = os.getenv('TMDB_API_KEY')
+TMDB_ACCESS_API_KEY = os.getenv('TMDB_ACCESS_API_KEY')
+TMDB_URL = "https://api.themoviedb.org/3/search/movie?include_adult=false&language=en-US&page=1"
+MOVIE_DB_INFO_URL = "https://api.themoviedb.org/3/movie"
+MOVIE_DB_IMAGE_URL = "https://image.tmdb.org/t/p/w500"
+
+headers = {
+    "accept": "application/json",
+    "Authorization": "Bearer " + TMDB_API_KEY
+}
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = ''
@@ -48,8 +60,8 @@ class Movie(db.Model):
         return f'<Movie {self.title}>'
 
 #Create table schema in the database. Requires application context.
-# with app.app_context():
-#     db.create_all()
+with app.app_context():
+    db.create_all()
 
 
 new_movie = Movie(
@@ -83,7 +95,7 @@ class RateMovieForm(FlaskForm):
 
 @app.route('/')
 def main():
-    result = db.session.execute(db.select(Movie))
+    result = db.session.execute(db.select(Movie).order_by(Movie.rating))
     all_movies = result.scalars().all()
     return render_template('index.html', movies=all_movies)
 
@@ -93,8 +105,28 @@ def add_movie():
     if form.validate_on_submit():
         movie_title = form.title.data
         #Need to make an API call to fetch movie details
+        result = requests.get(url=TMDB_URL, headers=headers, params={"query":movie_title})
+        all_movies = result.json()['results']
+        return render_template('select.html', movies=all_movies)
     return render_template('add.html', form=form)
 
+
+@app.route('/find')
+def find_movie():
+    movie_api_id = request.args.get("id")
+    if movie_api_id:
+        movie_api_url = f"{MOVIE_DB_INFO_URL}/{movie_api_id}"
+        response = requests.get(url=movie_api_url, headers=headers)
+        data = response.json()
+        new_movie = Movie(
+            title = data["title"],
+            year = data["release_date"].split("-")[0],
+            img_url = f"{MOVIE_DB_IMAGE_URL}/{data["poster_path"]}",
+            description = data['overview']
+        )
+        db.session.add(new_movie)
+        db.session.commit()
+        return redirect(url_for('edit', movie_id=new_movie.id))
 
 @app.route('edit/<int:movie_id>', methods=['GET', 'POST'])
 def edit_movie(movie_id):
